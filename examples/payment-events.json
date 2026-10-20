@@ -1,0 +1,18 @@
+[
+  {
+    "event_id": "pay-20260903-001",
+    "account_id": "acct-1042",
+    "amount_minor": 129900,
+    "currency": "USD",
+    "risk_score": 24,
+    "occurred_at_utc": "2026-09-03T18:42:11Z"
+  },
+  {
+    "event_id": "pay-20260903-002",
+    "account_id": "acct-7710",
+    "amount_minor": 880000,
+    "currency": "USD",
+    "risk_score": 86,
+    "occurred_at_utc": "2026-09-03T23:17:05Z"
+  }
+]

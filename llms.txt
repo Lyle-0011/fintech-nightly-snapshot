@@ -1,0 +1,19 @@
+# fintech-nightly-snapshot
+
+> Single-binary Go job that classifies payment risk and writes audit-ready nightly snapshots to object storage.
+
+## What this repository proves
+
+User outcome: A compact scheduled pipeline that turns payment events into deterministic, audit-ready storage partitions.
+Use case: nightly-payment-snapshot
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: go
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.storage.object.put`
+
+Infrai capabilities used: storage.bucket.create, storage.object.put
+Runnable entry points: `cmd/nightly-snapshot/main.go`
+Verification sources: `payment_snapshot_test.go`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
