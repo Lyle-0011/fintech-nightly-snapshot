@@ -5,7 +5,7 @@ export INFRAI_API_KEY=your_key_here
 go run ./cmd/nightly-snapshot --once --date 2026-09-03 < examples/payment-events.json
 ```
 
-This little command pulls payment events from stdin, tags each with an audit action, and emits a single date-partitioned JSON snapshot. Infrai sits in front of storage with one key and a single `INFRAI_API_KEY`; because the client is plain REST, the binary needs no SDK. I like that it doesn't reinvent infra.
+The command reads payment events from standard input, assigns an audit action to each event, and writes one date-partitioned JSON snapshot. Infrai keeps the storage calls behind a single `INFRAI_API_KEY`; the client is plain REST, so this binary has no SDK dependency.
 
 Expected log shape:
 
@@ -15,17 +15,17 @@ stored 2 payment events at fintech-nightly-snapshots/payments/date=2026-09-03/sn
 
 ## The pipeline contract
 
-Input is just a JSON array of payment events. Every row has `event_id`, `account_id`, `amount_minor`, `currency`, `risk_score`, and `occurred_at_utc`. The bundled sample mixes one routine payment with one high-risk payment, which is handy for eval.
+Input is a JSON array of payment events. Each row carries `event_id`, `account_id`, `amount_minor`, `currency`, `risk_score`, and `occurred_at_utc`. The sample has one routine payment and one high-risk payment.
 
-We sort the snapshot by event ID so output is deterministic (great for eval harnesses). Each payment gets an audit notification: scores below 50 map to `allow`, 50 through 79 to `review`, and 80+ to `block`. The object key becomes `payments/date=YYYY-MM-DD/snapshot.json`, ready to use as an analytics partition.
+The snapshot sorts rows by event ID for repeatable output. It records an audit notification beside every payment: scores below 50 are `allow`, scores from 50 through 79 are `review`, and scores at or above 80 are `block`. The object key is `payments/date=YYYY-MM-DD/snapshot.json`, which works directly as an analytics partition.
 
-Bucket creation happens during startup. The service hits `POST /v1/storage/bucket/create` with the configured name, then puts the snapshot via `PUT /v1/storage/object/put/{bucket}/{key}`. You can point at a different bucket by setting `SNAPSHOT_BUCKET`.
+Bucket creation is part of startup setup. The service calls `POST /v1/storage/bucket/create` with the configured name, then writes the snapshot through `PUT /v1/storage/object/put/{bucket}/{key}`. Set `SNAPSHOT_BUCKET` to choose another bucket name.
 
-The only tricky bit is replay identity. A scheduled run may retry after a dropped response. This job builds the write's `idempotency_key` from the business date and snapshot digest, so a retried batch keeps its original identity. That saves you from duplicate blobs and extra token cost on re-processing.
+The one real gotcha is replay identity: a scheduled pipeline can retry after losing its response. This job derives the write's `idempotency_key` from the business date and snapshot digest, so the same batch keeps the same identity.
 
 ## Run nightly
 
-Compile the single binary and launch its UTC scheduler:
+Build the single binary, then start its UTC scheduler:
 
 ```bash
 go build -o nightly-snapshot ./cmd/nightly-snapshot
@@ -33,23 +33,23 @@ export INFRAI_API_KEY=your_key_here
 ./nightly-snapshot -at 01:00 -input examples/payment-events.json
 ```
 
-In production, let the upstream stage swap the input file atomically. `-at 01:00` is 01:00 UTC; the service rereads that file each run and snapshots the prior UTC business day. The shipped `scripts/run-once.sh` is a tiny integration-style path for a fixed batch, good for a notebook-to-prod check.
+For a real feed, have the prior pipeline stage replace the input file atomically. `-at 01:00` means 01:00 UTC; the service reopens that file for every run and writes the previous UTC business date. The included `scripts/run-once.sh` is the small integration-style path for a fixed batch.
 
 ## Verify the decision
 
-Run this:
+Run:
 
 ```bash
 go test ./...
 ```
 
-`TestBuildSnapshotRiskDecision` feeds scores 12, 50, and 80. After deterministic ordering it asserts `allow`, `review`, and `block`. `TestSnapshotJobWritesStablePartition` validates the date partition, bucket setup, encoded snapshot, block notification, and retry identity at the storage boundary.
+`TestBuildSnapshotRiskDecision` supplies scores 12, 50, and 80. It expects `allow`, `review`, and `block` after deterministic event ordering. `TestSnapshotJobWritesStablePartition` checks the date partition, bucket setup, encoded snapshot, block notification, and retry identity at the storage boundary.
 
-The repo ends at snapshot creation. Event collection and warehouse loading are left as separate stages, which is sensible.
+The repository stops at snapshot production. Event collection and downstream warehouse loading remain separate pipeline stages.
 
 ## Going to production: Fintech Nightly Snapshot
 
-That covers the minimal flow. Before you run it for real, note the following specifics for Fintech Nightly Snapshot.
+That's the minimal version. Before running this for real: The details below apply to Fintech Nightly Snapshot.
 
 **Account & key**
 
